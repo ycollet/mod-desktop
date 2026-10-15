@@ -5,6 +5,7 @@
 *.dmg
 *.exe
 *.o
+__pycache__/
 *.pkg
 *.tar.gz
 *.zip

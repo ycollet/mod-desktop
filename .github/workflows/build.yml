@@ -16,6 +16,28 @@ env:
   RELEASE_OS_WIN64: ubuntu:22.04
 
 jobs:
+  linux-system-fedora:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - name: Install system build dependencies
+        run: |
+          dnf install -y git gcc gcc-c++ make cmake pkgconf-pkg-config python3 \
+            pipewire-jack-audio-connection-kit-devel alsa-lib-devel portaudio-devel \
+            lilv-devel lv2-devel qt5-qtbase-devel qt5-qtsvg-devel
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build native components against PipeWire JACK
+        run: |
+          make SYSTEM_DEPS=1 system-host system-utils system-midi system-launcher
+          ldd build-system/src/mod-host/mod-host | grep libjack
+          ldd build-system/src/mod-utils/libmod_utils.so | grep libjack
+      - name: Check staging and client lifecycle
+        run: |
+          python3 -m unittest discover -s tests -p test_system_build.py
+
   linux-x86_64:
     strategy:
       matrix:

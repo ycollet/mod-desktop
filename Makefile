@@ -1,5 +1,9 @@
 #!/usr/bin/make -f
 
+ifeq ($(SYSTEM_DEPS),1)
+include utils/linux/system.mk
+else
+
 VERSION = $(shell cat VERSION)
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -740,3 +744,5 @@ $(PAWPAW_PREFIX)/include/%:
 	./src/PawPaw/bootstrap-mod.sh $(PAWPAW_TARGET)
 
 # ---------------------------------------------------------------------------------------------------------------------
+
+endif

@@ -124,6 +124,9 @@ class AppWindow : public QMainWindow
     const QString cwd;
     AppProcess processHost;
     AppProcess processUI;
+   #ifdef MOD_DESKTOP_SYSTEM_DEPS
+    QByteArray hostStartupOutput;
+   #endif
     bool startingHost = false;
     bool startingUI = false;
     bool stoppingHost = false;
@@ -208,7 +211,20 @@ public:
         fillInDeviceList();
         loadSettings();
 
-       #ifdef Q_OS_WIN
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        ui.cb_device->clear();
+        ui.cb_device->addItem(tr("System JACK / PipeWire (externally managed)"));
+        ui.gb_audio->setEnabled(false);
+        ui.cb_device->setEnabled(false);
+        ui.l_device->setEnabled(false);
+        ui.cb_midi->setChecked(true);
+        ui.cb_midi->setEnabled(false);
+        ui.cb_verbose_jackd->setEnabled(false);
+        ui.cb_lv2_all_plugins->setChecked(true);
+        ui.cb_lv2_only_with_modgui->setChecked(false);
+        processHost.setProgram(cwd + "/mod-host");
+        processUI.setProgram(cwd + "/mod-ui");
+       #elif defined(Q_OS_WIN)
         processHost.setProgram(cwd + "\\jackd.exe");
         processUI.setProgram(cwd + "\\mod-ui.exe");
        #else
@@ -247,6 +263,10 @@ public:
 
     void fillInDeviceList()
     {
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        ui.b_start->setEnabled(true);
+        return;
+       #endif
         printf("--------------------------------------------------------\n");
 
         ui.cb_device->blockSignals(true);
@@ -806,6 +826,11 @@ private:
         ui.gb_audio->setEnabled(true);
         ui.gb_midi->setEnabled(true);
         ui.gb_lv2->setEnabled(true);
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        ui.cb_device->setEnabled(false);
+        ui.l_device->setEnabled(false);
+        ui.gb_audio->setEnabled(false);
+       #endif
         ui.l_status->setText(tr("Stopped"));
         systray->setToolTip(tr("MOD Desktop: Stopped"));
     }
@@ -899,6 +924,18 @@ private slots:
 
         writeMidiChannelsToProfile(ui.sp_midi_pb->value(), ui.sp_midi_ss->value());
 
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        hostStartupOutput.clear();
+        processHost.setArguments(QStringList{});
+        QProcessEnvironment env(QProcessEnvironment::systemEnvironment());
+        env.insert("LV2_PATH", getLV2Path(ui.cb_lv2_all_plugins->isChecked()));
+        env.insert("MOD_LOG", ui.cb_verbose_host->isChecked() ? "1" : "0");
+        processHost.setProcessEnvironment(env);
+        ui.text_host->appendPlainText(tr("Connecting MOD clients to system JACK / PipeWire."));
+        appendLauncherLog("Starting standalone MOD clients on system JACK / PipeWire");
+        setStarting();
+        processHost.start();
+       #else
         const bool midiEnabled = ui.cb_midi->isChecked();
         const int deviceIndex = ui.cb_device->currentIndex();
 
@@ -1013,6 +1050,7 @@ private slots:
 
         setStarting();
         processHost.start();
+       #endif
     }
 
     void stop()
@@ -1145,21 +1183,40 @@ private slots:
     void hostFinished(int exitCode, QProcess::ExitStatus exitStatus)
     {
         printf("----------- %s %d\n", __FUNCTION__, __LINE__);
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        const bool unexpected = !stoppingHost;
+       #endif
         startingHost = stoppingHost = false;
         stopUIIfNeeded();
         setStopped();
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        if (unexpected)
+            showErrorMessage(tr("MOD audio clients stopped. Check the Host log and ensure "
+                                "the system JACK / PipeWire server is running."));
+       #endif
     }
 
     void uiFinished(int exitCode, QProcess::ExitStatus exitStatus)
     {
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        const bool failed = !stoppingUI && (exitCode != 0 || exitStatus == QProcess::CrashExit);
+       #endif
         startingUI = stoppingUI = false;
         stopHostIfNeeded();
         setStopped();
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        if (failed)
+            showErrorMessage(tr("MOD UI stopped unexpectedly. Check the UI log for details."));
+       #endif
     }
 
     void hostReadStdOut()
     {
-        const QByteArray text = processHost.readAll().trimmed();
+        const QByteArray output = processHost.readAll();
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        hostStartupOutput += output;
+       #endif
+        const QByteArray text = output.trimmed();
 
         if (text.isEmpty())
             return;
@@ -1167,7 +1224,13 @@ private slots:
         ui.text_host->appendPlainText(text);
         appendLauncherLog(QString::fromUtf8(text));
 
-        if (text.contains("Internal client mod-host successfully loaded"))
+       #ifdef MOD_DESKTOP_SYSTEM_DEPS
+        const bool hostReady = startingHost && hostStartupOutput.contains("mod-host ready!");
+        hostStartupOutput = hostStartupOutput.right(4096);
+       #else
+        const bool hostReady = text.contains("Internal client mod-host successfully loaded");
+       #endif
+        if (hostReady)
         {
             startingHost = false;
             startingUI = true;

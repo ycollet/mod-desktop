@@ -6,6 +6,10 @@ PKG_CONFIG ?= pkg-config
 
 CXXFLAGS += -fPIC -std=gnu++14 -I. -DVERSION='"$(shell cat ../../VERSION)"'
 
+ifeq ($(SYSTEM_DEPS),1)
+CXXFLAGS += -DMOD_DESKTOP_SYSTEM_DEPS
+endif
+
 TARGET_MACHINE := $(shell $(CC) -dumpmachine)
 
 # ---------------------------------------------------------------------------------------------------------------------
