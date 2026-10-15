@@ -65,6 +65,16 @@ void initEvironment()
     setenv("MOD_DEVICE_HOST_PORT", "18182", 1);
     setenv("MOD_DEVICE_WEBSERVER_PORT", "18181", 1);
     setenv("PYTHONUNBUFFERED", "1", 1);
+   #ifdef MOD_DESKTOP_SYSTEM_DEPS
+    const char* const server = std::getenv("JACK_DEFAULT_SERVER");
+    setenv("MOD_DESKTOP_SERVER_NAME", server != nullptr ? server : "default", 1);
+    setenv("MOD_DEV_HMI", "1", 1);
+    // MOD pedalboards refer to system:capture_N / system:playback_N.
+    QByteArray props = qgetenv("PIPEWIRE_PROPS").trimmed();
+    if (props.startsWith('{') && props.endsWith('}'))
+        props = props.mid(1, props.size() - 2);
+    qputenv("PIPEWIRE_PROPS", "{ " + props + " jack.default-as-system = true }");
+   #endif
    #endif
 
     // get directory of this application
@@ -282,7 +292,7 @@ void initEvironment()
     setenv("MOD_LV2_PATH", path, 1);
   #endif
 
-   #if !(defined(__APPLE__) || defined(_WIN32))
+   #if !(defined(__APPLE__) || defined(_WIN32) || defined(MOD_DESKTOP_SYSTEM_DEPS))
     // special handling for PipeWire JACK, need to find full path to shared lib
     if (void* const pwlib = dlmopen(LM_ID_NEWLM, "libjack.so.0", RTLD_NOW|RTLD_LOCAL))
     {
@@ -321,7 +331,7 @@ void initEvironment()
    #endif
 
     // other
-   #ifndef _WIN32
+   #if !defined(_WIN32) && !defined(MOD_DESKTOP_SYSTEM_DEPS)
     std::memcpy(path, appDir, appDirLen);
     std::strncpy(path + appDirLen, "/jack", PATH_MAX - appDirLen - 1);
     setenv("JACK_DRIVER_DIR", path, 1);
@@ -330,6 +340,17 @@ void initEvironment()
 
 QString getLV2Path(const bool includeSystemPlugins)
 {
+   #ifdef MOD_DESKTOP_SYSTEM_DEPS
+    QString path = QString::fromUtf8(qgetenv("MOD_LV2_PATH"));
+    if (includeSystemPlugins)
+    {
+        path += ':';
+        path += qEnvironmentVariableIsSet("LV2_PATH")
+              ? QString::fromUtf8(qgetenv("LV2_PATH"))
+              : QStringLiteral("~/.lv2:/usr/local/lib/lv2:/usr/local/lib64/lv2:/usr/lib/lv2:/usr/lib64/lv2");
+    }
+    return path;
+   #else
    #ifdef _WIN32
     WCHAR path[MAX_PATH] = {};
     DWORD r, pathlen = GetEnvironmentVariableW(L"MOD_LV2_PATH", path, MAX_PATH - 1);
@@ -385,6 +406,7 @@ QString getLV2Path(const bool includeSystemPlugins)
     return QString::fromWCharArray(path);
    #else
     return QString::fromUtf8(path);
+   #endif
    #endif
 }
 

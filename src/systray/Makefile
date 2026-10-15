@@ -9,6 +9,10 @@ CXXFLAGS += -fPIC -std=gnu++14 -I. -DVERSION='"$(shell cat ../../VERSION)"'
 # so a plugin from one build still finds the app from another build of the same line
 CXXFLAGS += -DVERSION_LINE='"$(shell cut -d. -f1-2 ../../VERSION)"'
 
+ifeq ($(SYSTEM_DEPS),1)
+CXXFLAGS += -DMOD_DESKTOP_SYSTEM_DEPS
+endif
+
 TARGET_MACHINE := $(shell $(CC) -dumpmachine)
 
 # ---------------------------------------------------------------------------------------------------------------------

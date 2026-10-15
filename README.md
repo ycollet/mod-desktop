@@ -106,6 +106,68 @@ See `CONTRIBUTING.md` in mod-ui for the branch model and how a change travels to
 
 ## Development
 
+### Native Linux build with system dependencies (experimental)
+
+`SYSTEM_DEPS=1` uses the native compiler, system development libraries, and
+system Python packages instead of PawPaw. The default portable build is unchanged.
+This mode connects to an **already running JACK or PipeWire-JACK server**; it
+does not build, bundle, start, or stop JACK. A PipeWire JACK compatibility package
+is sufficient: a separate `jackd` installation is not required.
+
+On Fedora, install the build and Python dependencies:
+
+```sh
+sudo dnf install gcc gcc-c++ make cmake pkgconf-pkg-config \
+    pipewire-jack-audio-connection-kit-devel alsa-lib-devel portaudio-devel \
+    lilv-devel lv2-devel qt5-qtbase-devel qt5-qtsvg-devel \
+    python3 python3-aggdraw python3-pillow python3-tornado python3-pycryptodomex
+```
+
+Modern Tornado requires a compatible mod-ui checkout. The release-pinned
+`src/mod-ui` still uses Tornado 4 APIs; building against current Fedora packages
+requires the Fedora port, including its corrected coroutine and stream-callback
+compatibility support. Use `MOD_UI_DIR` to select that checkout without changing
+the release submodule pin:
+
+```sh
+make SYSTEM_DEPS=1 MOD_UI_DIR=../mod-ui
+make SYSTEM_DEPS=1 MOD_UI_DIR=../mod-ui run
+```
+
+The selected checkout supplies the UI features as well as its compatibility
+code; the Fedora branch currently has an older baseline than the release pin.
+
+`CC`, `CXX`, `CFLAGS`, `CXXFLAGS`, `LDFLAGS`, `PKG_CONFIG`, and `PYTHON` can be
+provided through the usual make/environment settings. Outputs are isolated under
+`build-system/`; the Make-based native components currently rebuild on each
+invocation to avoid mixing bundled and system objects. The staged runtime refers
+to the source checkouts, so it is a development build, not a relocatable package.
+Use `make SYSTEM_DEPS=1 clean` to remove only these outputs.
+
+The launcher runs mod-host and the MIDI merger/broadcaster as standalone clients.
+Device, sample-rate, buffer-size, and MIDI-backend selection belong to the
+external server; launcher controls for selecting its hardware/backend are
+disabled. For PipeWire, select the default input/output devices externally.
+The launcher enables `jack.default-as-system` for its clients so saved
+pedalboards can continue to use `system:capture_*` and `system:playback_*`.
+Other `PIPEWIRE_PROPS` settings are retained; `JACK_DEFAULT_SERVER` selects a
+non-default classic JACK server. Stop the standalone MOD services first if
+another mod-ui installation is already running.
+
+The bundled plugin collection, MOD Desktop plugin variant, and portable
+installers are not built in this mode. Install LV2 plugins separately; system
+plugins and plugins without MOD-specific GUIs are shown by default. The
+launcher still allows changing these plugin filters. With no supplied
+`LV2_PATH`, discovery includes `~/.lv2`, `/usr/local/lib/lv2`, `/usr/lib/lv2`,
+and their `lib64` counterparts. An explicit `LV2_PATH` supplies the system
+search directories instead.
+
+Build/runtime staging and client cleanup regression tests:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_system_build.py'
+```
+
 If you want to contribute, here are a few items where help would be appreciated:
 
 - Debugging and fixing Windows specific issues within mod-ui (*)
